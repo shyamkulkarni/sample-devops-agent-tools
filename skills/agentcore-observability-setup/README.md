@@ -54,7 +54,7 @@ account. The shared managed policy is cross-tenant and is not modified per-skill
 | **2 — Runtime config** | Transaction Search state, runtime tracing/env, Memory/Gateway delivery, X-Ray resource policy | `bedrock-agentcore:GetAgentRuntime`, `xray:GetTraceSegmentDestination`, `logs:DescribeDeliveries`, `logs:DescribeResourcePolicies` |
 | **3 — Non-runtime host** | Lambda / ECS / EKS host config | `lambda:GetFunctionConfiguration`, `ecs:DescribeTaskDefinition`, `eks:DescribeCluster` |
 
-Full policy JSON: [`references/iam-tiers.md`](references/iam-tiers.md). All permissions are read-only.
+Full policy JSON: [`references/iam-tiers.md`](https://github.com/aws/tools-for-devops-agent/blob/main/skills/agentcore-observability-setup/references/iam-tiers.md). All permissions are read-only.
 
 ### 3. Capability providers connected to the Agent Space
 
