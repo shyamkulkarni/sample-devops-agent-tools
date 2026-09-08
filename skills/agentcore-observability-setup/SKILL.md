@@ -56,7 +56,7 @@ what to add to unlock the rest. **Never** attempt to modify IAM.
 | Tier | Permissions | Unlocks |
 |---|---|---|
 | **1 — Standard** (default DA IAM) | `logs:DescribeLogGroups`, `logs:FilterLogEvents`, `logs:GetLogEvents`, `logs:StartQuery`, `logs:GetQueryResults`, `cloudwatch:GetMetricData`, `cloudwatch:ListMetrics`, `cloudwatch:DescribeAlarms` | Telemetry-arrival verification for any host |
-| **2 — Runtime config** | `bedrock-agentcore:GetAgentRuntime`, `bedrock-agentcore-control:List*`, `xray:GetTraceSegmentDestination`, `logs:DescribeDeliveries`, `logs:DescribeDeliverySources`, `logs:DescribeDeliveryDestinations`, `logs:DescribeResourcePolicies` | Runtime tracing/env, Transaction Search state, Memory/Gateway delivery, X-Ray resource policy |
+| **2 — Runtime config** | `bedrock-agentcore:GetAgentRuntime`, `bedrock-agentcore:ListAgentRuntimes`, `xray:GetTraceSegmentDestination`, `logs:DescribeDeliveries`, `logs:DescribeDeliverySources`, `logs:DescribeDeliveryDestinations`, `logs:DescribeResourcePolicies` | Runtime tracing/env, Transaction Search state, Memory/Gateway delivery, X-Ray resource policy |
 | **3 — Non-runtime host** | `lambda:GetFunctionConfiguration`; `ecs:DescribeTaskDefinition`, `ecs:DescribeServices`, `ecs:ListTasks`; `eks:DescribeCluster` | Host-side config verification for Lambda / ECS / EKS |
 
 If Tier 2/3 permissions are absent, tell the user the check is **prescriptive-only** here and give the
@@ -66,7 +66,7 @@ re-run can verify it. The shared managed policy is cross-tenant and must not be 
 ## Step 2: Determine Scope (Host & Surface)
 
 **Host detection:**
-- **Runtime** — auto-detect with `bedrock-agentcore:GetAgentRuntime` / `bedrock-agentcore-control:ListAgentRuntimes` (Tier 2). If absent, ask the user.
+- **Runtime** — auto-detect with `bedrock-agentcore:GetAgentRuntime` / `bedrock-agentcore:ListAgentRuntimes` (Tier 2). If absent, ask the user.
 - **Non-runtime** — the agent cannot reliably auto-detect the host. Ask: *"Is the agent on Lambda, ECS, EKS, or on-prem/another cloud?"*
 
 **Surfaces to assess** (ask which apply, or discover via Tier 2 `List*`):
@@ -101,8 +101,8 @@ The complete check catalog with APIs, log-group patterns, and pass/fail logic is
 2. **Logs arriving (VERIFY, Tier 1):** `logs:FilterLogEvents` on the runtime log stream in the last 24h. No recent events after invocations → HIGH.
 3. **Spans flowing (VERIFY, Tier 1):** check the `spans` log stream in the agent's log group (unified destination) or the shared `aws/spans` log group. No spans despite invocations → CRITICAL (points to Transaction Search disabled or missing instrumentation).
 4. **Session metrics emitting (VERIFY, Tier 1):** `cloudwatch:ListMetrics` namespace `bedrock-agentcore`. Absent → MEDIUM.
-5. **Runtime tracing / span destination (VERIFY, Tier 2):** `bedrock-agentcore:GetAgentRuntime` → inspect env for `UNIFIED_TRACES_DESTINATION_ENABLED` and `DISABLE_ADOT_OBSERVABILITY`. If ADOT observability disabled unintentionally → HIGH.
-6. **X-Ray resource policy on log group (VERIFY, Tier 2):** `logs:DescribeResourcePolicies` — must allow `xray.amazonaws.com` to `logs:PutLogEvents` on the agent's log group when using the unified span destination. Missing → HIGH.
+5. **Runtime tracing / span destination (VERIFY, Tier 2):** `bedrock-agentcore:GetAgentRuntime` → inspect env for `UNIFIED_TRACES_DESTINATION_ENABLED` and `DISABLE_ADOT_OBSERVABILITY`. Starting **2026-07-20**, newly created agents in supported AWS Regions default to the unified span destination (the agent's own log group) — `UNIFIED_TRACES_DESTINATION_ENABLED=false` is now the opt-out. Agents created before that date remain on shared `aws/spans` unless opted in. If ADOT observability disabled unintentionally → HIGH.
+6. **X-Ray resource policy on log group (VERIFY, Tier 2):** `logs:DescribeResourcePolicies` — must allow `xray.amazonaws.com` to `logs:PutLogEvents` on the agent's log group. **Applies by default for agents created after 2026-07-20 in supported Regions**, since unified span destination is the new default (per the [AgentCore release notes](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/release-notes.html)). Mark N/A only when the agent was created before 2026-07-20 and still delivers to shared `aws/spans`, or the customer has explicitly opted out via `UNIFIED_TRACES_DESTINATION_ENABLED=false`. Missing → HIGH.
 7. **Code-level instrumentation (PRESCRIBE):** cannot read source. If spans are absent, prescribe: `aws-opentelemetry-distro>=0.10.0` (**≥0.18.0** for unified span destination) + `boto3` in `requirements.txt`; launch with `opentelemetry-instrument python main.py` (container `CMD ["opentelemetry-instrument","python","main.py"]`); framework tracing enabled (e.g. Strands tracer, `opentelemetry-instrumentation-langchain`); session id via `X-Amzn-Bedrock-AgentCore-Runtime-Session-Id`.
 
 ### 3.3 Memory & Gateway resources

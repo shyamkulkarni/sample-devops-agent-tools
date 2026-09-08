@@ -29,8 +29,8 @@ to CloudWatch Logs, so traces never appear even when the agent runs and instrume
 | R3 | Spans flowing | VERIFY (Tier 1) | `spans` stream in agent log group **or** shared `aws/spans` | spans present after invocations | CRITICAL |
 | R4 | Session metrics emitting | VERIFY (Tier 1) | `cloudwatch:ListMetrics` namespace `bedrock-agentcore` | metrics present | MEDIUM |
 | R5 | Runtime tracing / ADOT not disabled | VERIFY (Tier 2) | `bedrock-agentcore:GetAgentRuntime` env | `DISABLE_ADOT_OBSERVABILITY` not unintentionally `true` | HIGH |
-| R6 | Span destination mode | VERIFY (Tier 2) | `GetAgentRuntime` env `UNIFIED_TRACES_DESTINATION_ENABLED` | matches intended destination | INFO/LOW |
-| R7 | X-Ray resource policy on log group | VERIFY (Tier 2) | `logs:DescribeResourcePolicies` | policy allows `xray.amazonaws.com` `logs:PutLogEvents` on the agent log group | HIGH — **only when the agent uses the unified span destination** (R6). If the agent delivers to the shared `aws/spans` group, this per-runtime policy is not required — mark N/A, do not flag. |
+| R6 | Span destination mode | VERIFY (Tier 2) | `GetAgentRuntime` env `UNIFIED_TRACES_DESTINATION_ENABLED` | matches intended destination. **Default-on for agents created after 2026-07-20 in supported Regions** (agent's own log group); agents created before that date default to shared `aws/spans` unless opted in | INFO/LOW |
+| R7 | X-Ray resource policy on log group | VERIFY (Tier 2) | `logs:DescribeResourcePolicies` | policy allows `xray.amazonaws.com` `logs:PutLogEvents` on the agent log group | HIGH — **applies by default for agents created after 2026-07-20 in supported Regions**, since unified span destination is the new default (per the AgentCore release notes). Mark N/A only when the agent was created before 2026-07-20 and still delivers to shared `aws/spans`, or the customer has explicitly opted out via `UNIFIED_TRACES_DESTINATION_ENABLED=false`. |
 | R8 | ADOT distro in requirements | PRESCRIBE | — | `aws-opentelemetry-distro>=0.10.0` (≥0.18.0 for unified spans) present | HIGH (if spans absent) |
 | R9 | `opentelemetry-instrument` launch | PRESCRIBE | — | agent launched via `opentelemetry-instrument python main.py` | HIGH (if spans absent) |
 | R10 | Framework tracing + auto-instrumentor | PRESCRIBE | — | framework emits OTEL (Strands tracer / `opentelemetry-instrumentation-langchain` / OpenInference / Openllmetry / OpenLit / Traceloop) | MEDIUM |
@@ -80,5 +80,7 @@ Default vended log group: `/aws/vendedlogs/bedrock-agentcore/{memory|gateway}/AP
   Layer for OpenTelemetry only.
 - Unified span destination (spans in the agent's own log group instead of shared `aws/spans`)
   requires **ADOT ≥ 0.18.0** and the X-Ray log-group resource policy (R7). Earlier versions ignore
-  the setting and deliver to `aws/spans`.
+  the setting and deliver to `aws/spans`. **As of 2026-07-20, newly created agents in supported AWS
+  Regions default to the unified span destination**; agents created before that date remain on
+  shared `aws/spans` unless `UNIFIED_TRACES_DESTINATION_ENABLED=true` is set explicitly.
 - Cross-service trace correlation requires W3C Trace Context (`traceparent`) propagation.

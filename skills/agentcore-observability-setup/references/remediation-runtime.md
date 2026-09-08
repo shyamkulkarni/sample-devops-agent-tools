@@ -50,10 +50,13 @@ libraries: OpenInference, Openllmetry, OpenLit, Traceloop.
 
 Set on the agent runtime environment:
 
-- Opt in to the agent's own log group: `UNIFIED_TRACES_DESTINATION_ENABLED=true`
-- Opt out (use shared `aws/spans`): `UNIFIED_TRACES_DESTINATION_ENABLED=false`
+- Deliver spans to the agent's own log group: `UNIFIED_TRACES_DESTINATION_ENABLED=true`
+- Deliver spans to the shared `aws/spans` log group: `UNIFIED_TRACES_DESTINATION_ENABLED=false`
 
-Requires ADOT ≥ 0.18.0; earlier versions ignore this and use `aws/spans`.
+**Default:** starting 2026-07-20, newly created agents in supported AWS Regions default to the
+unified span destination (agent's own log group), so `=false` is now the opt-out. Agents created
+before that date default to shared `aws/spans` unless `=true` is set explicitly. Requires ADOT ≥
+0.18.0; earlier versions ignore this setting and deliver to `aws/spans` regardless.
 
 ---
 
