@@ -12,6 +12,9 @@ description: >
   returns evidence-backed PASS/FAIL/N/A scorecards with prioritized
   remediations. Do not use it for a quick ungraded health snapshot or an active
   incident investigation.
+metadata:
+  author: shyamkulkarni
+  version: "1.9.3"
 ---
 # EKS Operations Review
 ## Scope boundary
