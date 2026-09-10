@@ -33,9 +33,35 @@ The multi-artifact split is the agent's central design decision. A full review s
 
 - An AWS DevOps Agent space
 - IAM permissions for EKS read APIs (`eks:DescribeCluster`, `eks:ListNodegroups`, `eks:DescribeNodegroup`, `eks:ListAddons`, `eks:DescribeAddon`, `eks:ListInsights`, `eks:DescribeInsight`), CloudWatch metrics and Logs Insights reads, EC2 describe APIs, and CloudTrail lookup
-- Kubernetes RBAC allowing the read verbs above for the agent's identity on the target cluster — see the skill's [`references/docs/minimum-rbac.md`](https://github.com/aws/tools-for-devops-agent/blob/main/skills/aws-eks-operations-review/references/docs/minimum-rbac.md)
+- **EKS access configured in DevOps Agent** so the agent can run read-only `kubectl` against the cluster — see [Important: EKS access setup](#important-eks-access-setup-in-devops-agent) below. Without this the agent cannot discover any Kubernetes object and the review is almost entirely N/A.
+- Kubernetes read access for the agent's identity on the target cluster — granted through the EKS access entry below. For the underlying verb and resource list, see the skill's [`references/docs/minimum-rbac.md`](https://github.com/aws/tools-for-devops-agent/blob/main/skills/aws-eks-operations-review/references/docs/minimum-rbac.md)
 - The [aws-eks-operations-review skill](https://github.com/aws/tools-for-devops-agent/tree/main/skills/aws-eks-operations-review) uploaded to your Agent Space. Important note: for the skill to be used by the custom agent, choose "All agents" in the "Agent Type" field when importing the skill, even though the skill's README instructs to choose specific agent types
 - If your cluster's metrics and logs live outside CloudWatch — Grafana, Prometheus, Loki, or another observability platform — see [Optional: third-party MCP tools](#optional-third-party-mcp-tools-environment-dependent). Without that setup the telemetry-dependent rows are marked N/A rather than graded.
+
+### Important: EKS access setup in DevOps Agent
+
+**This is the single most common reason a run produces an empty-looking review.** `use_kubectl` reaches your cluster through an EKS **access entry** granted to your Agent Space's IAM role. Until that entry exists, every one of the 49 discovery areas returns `n/a` with a permission error, and the review completes honestly but almost entirely unassessed — scorecards full of N/A rows rather than findings. Follow [AWS EKS access setup](https://docs.aws.amazon.com/devopsagent/latest/userguide/configuring-integrations-and-knowledge-aws-eks-access-setup.html) in the DevOps Agent user guide, once per cluster you intend to review.
+
+The short version:
+
+1. **Check the cluster's authentication mode includes the EKS API.** On the cluster's **Access** tab in the Amazon EKS console, the authentication mode must include EKS API. If it does not, switch to a mode that does before continuing. (This agent's Security pillar also grades this setting — a cluster still on `API_AND_CONFIG_MAP` will be flagged, which is expected and separate from access setup.)
+2. **Find your Agent Space's primary cloud source IAM role ARN.** In your Agent Space: **Capabilities → Cloud → Primary Source → Edit**.
+3. **Create an IAM access entry** on the cluster's **Access** tab, using that role ARN as the IAM principal.
+4. **Attach an access policy** and set the access scope — see the policy guidance below.
+5. **Verify** by asking the agent something simple about the cluster, such as listing pods in a namespace, before running a full review.
+
+#### Policy choice — use `AmazonEKSAdminViewPolicy` for complete discovery
+
+The AWS documentation's default is `AmazonAIOpsAssistantPolicy`, which is sufficient for typical incident investigation. **An operations review is broader than an investigation.** The 49 discovery areas walk the whole cluster object graph — namespaces, workloads, RBAC ClusterRoles and bindings, admission webhook configurations, CRDs, StorageClasses, PodDisruptionBudgets, NetworkPolicies, ResourceQuotas, LimitRanges, ServiceAccounts, and more. Object kinds the access policy does not cover come back as permission denials, which the agent correctly records as N/A with the exact reason rather than guessing — so the gap shows up as a review with real coverage holes.
+
+**For all Kubernetes objects to be discovered, attach the AWS managed `AmazonEKSAdminViewPolicy` access policy**, with the access scope set to **Cluster**.
+
+- **Scope must be Cluster, not namespace-limited.** The review is cluster-wide by definition. Namespace-scoped access silently reduces coverage: cluster-scoped objects such as ClusterRoles, webhook configurations, StorageClasses, and CRDs become invisible, and pillars like Security and Networking lose most of their evidence.
+- **Read-only either way.** `AmazonEKSAdminViewPolicy` grants view access only. It cannot create, modify, or delete cluster resources, and the agent's own contract forbids mutation regardless of what the policy permits.
+
+**One security note worth raising with whoever approves the access entry:** `AmazonEKSAdminViewPolicy` grants read access to *all* Kubernetes objects, and that includes Secrets. This agent never fetches Secret values — the skill and system prompt both prohibit it, and Secret checks are graded on existence, type, and metadata only. But the IAM grant is broader than what the agent uses, so the decision should be made deliberately rather than by default. If your organization will not permit it, use `AmazonAIOpsAssistantPolicy` instead and accept that some rows will be N/A for lack of access; the review remains valid, just less complete.
+
+If the agent cannot reach the cluster at all, confirm the access entry uses the exact IAM role ARN from the Agent Space dialog and that an access policy is actually attached — a per-cluster step that is easy to miss when connecting several clusters to one Agent Space.
 
 ## Creating the Agent
 

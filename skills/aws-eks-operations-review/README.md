@@ -5,6 +5,19 @@
 
 Read-only EKS best-practices review for AWS DevOps Agent. It uses the MCP tool `use_kubectl` for Kubernetes discovery, attempts 49 areas, grades selected canonical checks as PASS/FAIL/N/A, loads only FAIL remediations, runs a hard QA gate, and returns the complete Markdown report directly in the response. Tool results remain transient in conversation: nothing is written to Amazon S3, an inventory/state/report file, or a checkpoint. It never mutates resources. Customer-account reads use audited read-only agent access, never local AWS CLI/boto3 credentials.
 
+## Important: EKS access setup
+
+`use_kubectl` reaches a cluster through an EKS **access entry** granted to your Agent Space's IAM role. Until that entry exists, all 49 discovery areas return `n/a` with a permission error and the review completes almost entirely unassessed. Configure it once per cluster, following [AWS EKS access setup](https://docs.aws.amazon.com/devopsagent/latest/userguide/configuring-integrations-and-knowledge-aws-eks-access-setup.html):
+
+1. Confirm the cluster's authentication mode includes the EKS API (cluster **Access** tab in the Amazon EKS console).
+2. Copy your Agent Space's primary cloud source IAM role ARN from **Capabilities → Cloud → Primary Source → Edit**.
+3. Create an IAM access entry on the cluster's **Access** tab using that role ARN as the principal.
+4. Attach an access policy with access scope **Cluster**.
+
+**For all Kubernetes objects to be discovered, attach the AWS managed `AmazonEKSAdminViewPolicy` access policy.** The documented default, `AmazonAIOpsAssistantPolicy`, suits incident investigation, but this review walks the full cluster object graph — RBAC roles and bindings, admission webhook configurations, CRDs, StorageClasses, PodDisruptionBudgets, NetworkPolicies, ResourceQuotas, ServiceAccounts — and any object kind the policy does not cover is recorded as N/A for lack of access rather than graded. Namespace-scoped access has the same effect on cluster-scoped objects, so use the Cluster scope.
+
+`AmazonEKSAdminViewPolicy` is view-only, but it does grant read access to all objects including Secrets. This skill never fetches Secret values — Secret checks are graded on existence, type, and metadata only — so the grant is broader than the skill uses and should be approved deliberately. Where that is not acceptable, use `AmazonAIOpsAssistantPolicy` and expect some rows to be N/A.
+
 ## Runtime architecture
 
 `SKILL.md` is an S0–S8 state machine. `references/runtime/` contains the ordered discovery manifest, bounded inventory schema, router, cluster gates, grading guards, exact check manifest, telemetry thresholds, common-check crosswalk, QA gate, and final-response contract. `references/pillars/` owns canonical predicates for nine pillars; root reference files own AX and gated Upgrade/Windows/Hybrid/AI-ML definitions. `references/remediations/index.md` dispatches known FAIL IDs to small shards. `references/control-plane-health/` contains staged CP query/source/threshold/procedure/remediation files. `references/docs/` contains operator/background material and is not normal runtime authority.
