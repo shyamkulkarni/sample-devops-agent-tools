@@ -2,9 +2,6 @@
 
 **Version: 1.0.0** (see [`CHANGELOG.md`](https://github.com/aws/tools-for-devops-agent/blob/main/custom-agents/aws-eks-operations-review/CHANGELOG.md)) | Requires skill version 1.9.3+ (see [`skills/aws-eks-operations-review/`](https://github.com/aws/tools-for-devops-agent/tree/main/skills/aws-eks-operations-review))
 
-> ⚠️ This custom agent is sample code, not intended for production use without additional review and
-> testing. Users should validate in a non-production environment first.
-
 ## Purpose
 
 This custom agent is an orchestrator for the [`aws-eks-operations-review`](https://github.com/aws/tools-for-devops-agent/tree/main/skills/aws-eks-operations-review) skill. It runs a full read-only operations review of one Amazon EKS cluster and publishes the result as **multiple artifacts — one Summary plus one per pillar** rather than a single large report.

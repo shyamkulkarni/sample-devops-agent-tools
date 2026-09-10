@@ -1,8 +1,5 @@
 # AWS EKS Operations Review skill
 
-> ⚠️ This skill is sample code, not intended for production use without additional review and
-> testing. Users should validate in a non-production environment first.
-
 Read-only EKS best-practices review for AWS DevOps Agent. It uses the MCP tool `use_kubectl` for Kubernetes discovery, attempts 49 areas, grades selected canonical checks as PASS/FAIL/N/A, loads only FAIL remediations, runs a hard QA gate, and returns the complete Markdown report directly in the response. Tool results remain transient in conversation: nothing is written to Amazon S3, an inventory/state/report file, or a checkpoint. It never mutates resources. Customer-account reads use audited read-only agent access, never local AWS CLI/boto3 credentials.
 
 ## Important: EKS access setup
