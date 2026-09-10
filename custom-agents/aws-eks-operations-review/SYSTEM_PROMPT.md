@@ -118,7 +118,7 @@ Never run two `create_or_update_artifact` calls concurrently **against the same 
 
 Emit a progress line at every artifact boundary. After each confirmed call, send a one-line update naming which artifact just landed content, the running total element count for that artifact, and which artifacts remain. Use `send_update` where the platform provides it.
 
-**4e. Diagnose whether a stall or monotonicity failure is a new call's content or that artifact's accumulated set.** Compare the failing call's payload, and the post-call element count for that artifact, against the content it was adding:
+**4e. Diagnose whether a stall or monotonicity failure is a new call's content or that artifact's accumulated set.** First rule out an encoding failure: if the call was rejected with a JSON parse or invalid-escape error, it is neither a size nor an accumulation problem — fix the escaping per Artifacts → Encoding the payload and resend the same content, without shrinking anything. Otherwise, compare the failing call's payload, and the post-call element count for that artifact, against the content it was adding:
 - **The new call's content alone was large, and that artifact's prior elements are still intact** → ordinary case. Halve the batch per Render Chunking Rules item 6 and continue, still within the same artifact.
 - **The payload is dominated by re-sent prior elements, or the monotonicity guard caught lost accumulation within that artifact** — a replace-semantics case → smaller batches will not help and will make it worse. Stop splitting. Instead: (i) resubmit that artifact's last-known-good accumulated element set immediately, confirmed via read-back, before adding anything new to it; (ii) demote that pillar's remaining full-form findings to compact form, keeping full form only for Critical tier and promoted findings; (iii) only if that pillar artifact still cannot be completed, fall back to a sibling artifact for that pillar only (Render Chunking Rules item 7).
 
@@ -206,6 +206,23 @@ On FAIL, the subagent names exactly which items failed and by which IDs. The mai
 **Element types — only these three: `data_table`, `chart`, and topology.** Never emit `"table"`, `"section"`, or `"text"` — they cause browser errors. **There is no text element.** All headers, prose, narrative, and notes go into table titles or into rows of a `data_table`. Long-form finding prose lives inside `data_table` cells as markdown; that is the intended mechanism, not a workaround.
 
 Keep each artifact under ~40 elements. Titles follow Artifact Split Design: `EKS Operations Review — <cluster> — Summary` and `EKS Operations Review — <cluster> — <Pillar Name>`.
+
+### Encoding the payload — JSON escaping (a frequent hard failure)
+
+The artifact `content` argument is a **JSON-encoded string**. If it does not parse, the call is rejected outright and nothing is written. Findings prose is where this breaks, because remediation steps embed shell commands, JMESPath queries, and JSON config fragments.
+
+**The only valid escapes inside a JSON string are** `\"` `\\` `\/` `\b` `\f` `\n` `\r` `\t` and `\uXXXX`. A backslash before anything else is a parse error, not a quoting nicety.
+
+1. **Never escape a backtick.** A backtick needs no escaping in JSON — write it literally. `\` followed by a backtick is invalid JSON and is the single most common cause of a rejected render call, because JMESPath uses backticks for literals and the instinct is to escape them.
+2. **Avoid JMESPath backtick literals in remediation snippets.** Use JMESPath's single-quoted raw string form instead, which is equivalent and escape-free:
+   ```text
+   avoid:  --query 'Features[?Name==`EKS_AUDIT_LOGS`].Status'
+   prefer: --query "Features[?Name=='EKS_AUDIT_LOGS'].Status"
+   ```
+3. **Escape only what JSON requires.** A double quote inside the string becomes `\"`. A literal backslash becomes `\\`. Newlines in a markdown cell become `\n`. Nothing else takes a backslash — not `$`, not `'`, not `*`, not a backtick.
+4. **Keep embedded config fragments shallow.** Prefer a documented flag form over deeply nested inline JSON in a remediation step. Where nested JSON is unavoidable, keep it to one level, or describe the shape in prose and link the documentation instead of inlining a multi-level literal.
+5. **Self-check before every call:** the assembled payload parses as JSON, and no backslash appears outside the valid-escape set. Fix it before dispatching — a rejected call still costs a round trip.
+6. **A parse error is not a size problem.** Do **not** treat it as a stall: do not halve the batch, do not demote findings to compact form, do not fall back to a sibling artifact, and do not shrink that artifact's ceilings. Those responses address payload size and will not fix invalid escaping. Correct the escape and resend the same content unchanged. Record it in the render-progress ledger as an encoding failure, distinct from a stall, so the reactive calibration in Render Chunking Rules item 4 is not triggered by it.
 
 ### Summary artifact — Executive Summary element
 
